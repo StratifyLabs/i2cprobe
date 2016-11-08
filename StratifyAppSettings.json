@@ -1,0 +1,10 @@
+{
+    "AppBuild": "build_release_armv7m",
+    "AppBuildPrefix": "build_",
+    "AppInstallPath": "/app/.install",
+    "AppRamSize": 8192,
+    "IsAppInstallAll": false,
+    "IsAppInstallFiles": false,
+    "IsAppRam": false,
+    "IsAppStartup": false
+}
