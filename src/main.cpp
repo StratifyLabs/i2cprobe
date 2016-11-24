@@ -4,11 +4,16 @@
 #include <stfy/var.hpp>
 #include <stfy/sys.hpp>
 
-static void probe_bus(int port, int bitrate);
+
+#define VERSION "0.1"
+#define PUBLISHER "Stratify Labs, Inc (C) 2016"
+
+static void probe_bus(int port, int bitrate, int pinassign);
 static void read_bus(int port, int addr, int start, int nbyte);
 
 static void show_buffer(const char * buffer, int nbyte);
-static void show_usage(){}
+static void show_usage(const char * name);
+static void show_version(const char * name);
 
 int main(int argc, char * argv[]){
 	//parse arguments
@@ -18,6 +23,7 @@ int main(int argc, char * argv[]){
 
 	int port = 0;
 	int bitrate = 100000;
+	int pinassign = 0;
 
 	for(i=1; i < argc; i++){
 		option = argv[i];
@@ -26,7 +32,7 @@ int main(int argc, char * argv[]){
 				arg = argv[i+1];
 				port = arg.atoi();
 			} else {
-				show_usage();
+				show_usage(argv[0]);
 				exit(0);
 			}
 		} else if( (option == "-b") || (option == "-bitrate") ){
@@ -34,24 +40,40 @@ int main(int argc, char * argv[]){
 				arg = argv[i+1];
 				bitrate = arg.atoi();
 			} else {
-				show_usage();
+				show_usage(argv[0]);
 				exit(0);
 			}
+		} else if( option == "-pin" ){
+			if( argc > i+1 ){
+				arg = argv[i+1];
+				pinassign = arg.atoi();
+			} else {
+				show_usage(argv[0]);
+				exit(0);
+			}
+
+		} else if( option == "--help" ){
+			show_usage(argv[0]);
+			exit(0);
+		} else if( option == "--version" ){
+			show_version(argv[0]);
+			exit(0);
 		}
 	}
 
+	printf("Probe %d %d\n", port, bitrate);
 
-	probe_bus(port, bitrate);
+	probe_bus(port, bitrate, pinassign);
 
 	return 0;
 }
 
 
-void probe_bus(int port, int bitrate){
+void probe_bus(int port, int bitrate, int pinassign){
 	I2C i2c(port);
 	int i;
 	char c;
-	i2c.init(100000);
+	i2c.init(bitrate, pinassign);
 	for(i=0; i < 127; i++){
 		if( i % 16 == 0 ){
 			printf("0x%02X:", i);
@@ -110,4 +132,16 @@ void read_bus(int port, int addr, int start, int nbyte){
 	}
 
 	i2c.close();
+}
+
+void show_version(const char * name){
+	printf("%s version: %s by %s\n", name, VERSION, PUBLISHER);
+}
+
+void show_usage(const char * name){
+	printf("%s version: %s by %s\n", name, VERSION, PUBLISHER);
+	printf("usage: %s [-p port] [-b bitrate] [-pin pinassign]\n", name);
+	printf("\t-p port: I2C port number (default is 0, ie: /dev/i2c0)\n");
+	printf("\t-b bitrate: I2C bitrate (default is 100K)\n");
+	printf("\t-pin pinassign: I2C pin assignment (default is zero)\n");
 }

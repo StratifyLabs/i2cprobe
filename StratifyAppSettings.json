@@ -1,10 +1,15 @@
 {
-    "AppBuild": "build_release_armv7m",
+    "AppBuild": "build_release_armv7em_fpu",
     "AppBuildPrefix": "build_",
+    "AppGithub": "https://github.com/StratifyLabs/i2cprobe",
     "AppInstallPath": "/app/.install",
+    "AppProject": "i2cprobe",
+    "AppProjectId": "",
+    "AppProjectVersion": "0.1",
     "AppRamSize": 8192,
     "IsAppInstallAll": false,
     "IsAppInstallFiles": false,
     "IsAppRam": false,
-    "IsAppStartup": false
+    "IsAppStartup": false,
+    "type": "StratifyApp"
 }
