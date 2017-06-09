@@ -5,77 +5,81 @@
 #include <stfy/sys.hpp>
 
 
-#define VERSION "0.1"
+#define VERSION "0.2"
 #define PUBLISHER "Stratify Labs, Inc (C) 2016"
 
-static void probe_bus(int port, int bitrate, int pinassign, bool pu);
-static void read_bus(int port, int addr, int start, int nbyte);
-
-static void show_buffer(const char * buffer, int nbyte);
 static void show_usage(const char * name);
-static void show_version(const char * name);
+
+typedef struct {
+	int port;
+	int bitrate;
+	int pinassign;
+	bool pu;
+	int action;
+	int slave_addr;
+	int offset;
+	int value;
+	int nbytes;
+	bool pointer_16;
+} options_t;
+
+static void probe_bus(const options_t & options);
+static void read_bus(const options_t & options);
+static void write_bus(const options_t & options);
+
+static void i2c_open(I2C & i2c, const options_t & options);
+
+static void parse_options(const Cli & cli, options_t & options);
+
+enum {
+	ACTION_PROBE,
+	ACTION_READ,
+	ACTION_WRITE,
+	ACTION_TOTAL
+};
 
 int main(int argc, char * argv[]){
-	//parse arguments
-	String option;
-	String arg;
-	int i;
 
-	int port = 0;
-	int bitrate = 100000;
-	int pinassign = 0;
-	bool pu = false;
+	Cli cli(argc, argv);
 
-	for(i=1; i < argc; i++){
-		option = argv[i];
-		if( (option == "-p") || (option == "-port") ){
-			if( argc > i+1 ){
-				arg = argv[i+1];
-				port = arg.atoi();
-			} else {
-				show_usage(argv[0]);
-				exit(0);
-			}
-		} else if( (option == "-b") || (option == "-bitrate") ){
-			if( argc > i+1 ){
-				arg = argv[i+1];
-				bitrate = arg.atoi();
-			} else {
-				show_usage(argv[0]);
-				exit(0);
-			}
-		} else if( (option == "-pa") || (option =="-pinassign") ){
-			if( argc > i+1 ){
-				arg = argv[i+1];
-				pinassign = arg.atoi();
-			} else {
-				show_usage(argv[0]);
-				exit(0);
-			}
+	cli.set_version(VERSION);
+	cli.set_publisher(PUBLISHER);
+	options_t options;
 
-		} else if( (option == "-pu")  ){
-			pu = true;
-		} else if( option == "--help" ){
-			show_usage(argv[0]);
-			exit(0);
-		} else if( option == "--version" ){
-			show_version(argv[0]);
-			exit(0);
-		}
+	if( cli.is_option("--help") ){
+		show_usage(argv[0]);
+		exit(0);
 	}
 
-	printf("Probe I2C Port:%d At:%dbps PU:%d\n", port, bitrate, pu);
+	parse_options(cli, options);
 
-	probe_bus(port, bitrate, pinassign, pu);
+
+	printf("I2C Port:%d Bitrate:%dbps PU:%d Pinassign:%d\n",
+			options.port,
+			options.bitrate,
+			options.pu,
+			options.pinassign);
+
+
+	switch(options.action){
+	case ACTION_PROBE:
+		printf("Probe:\n");
+		probe_bus(options);
+		break;
+	case ACTION_READ:
+		printf("Read: %d bytes from 0x%X at %d\n", options.nbytes, options.slave_addr, options.offset);
+		read_bus(options);
+		break;
+	case ACTION_WRITE:
+		printf("Write: %d to %d on 0x%X\n", options.value, options.offset, options.slave_addr);
+		write_bus(options);
+		break;
+	}
 
 	return 0;
 }
 
-
-void probe_bus(int port, int bitrate, int pinassign, bool pu){
-	I2C i2c(port);
-	int i;
-	char c;
+void i2c_open(I2C & i2c, const options_t & options){
 	int flags = I2C::MASTER;
 
 	if( i2c.open(I2C::RDWR) < 0 ){
@@ -83,16 +87,26 @@ void probe_bus(int port, int bitrate, int pinassign, bool pu){
 		exit(1);
 	}
 
-	if( pu ){
+	if( options.pu ){
 		flags |= I2C::PULLUP;
 	}
 
-	if( i2c.set_attr(bitrate, pinassign,flags) < 0 ){
+	if( i2c.set_attr(options.bitrate, options.pinassign,flags) < 0 ){
+		i2c.close();
 		perror("Failed to set I2C attributes");
 		exit(1);
 	}
+}
 
-	for(i=0; i < 127; i++){
+
+void probe_bus(const options_t & options){
+	I2C i2c(options.port);
+	int i;
+	char c;
+
+	i2c_open(i2c, options);
+
+	for(i=0; i <= 127; i++){
 		if( i % 16 == 0 ){
 			printf("0x%02X:", i);
 		}
@@ -116,46 +130,122 @@ void probe_bus(int port, int bitrate, int pinassign, bool pu){
 	i2c.close();
 }
 
-static void show_buffer(const char * buffer, int nbyte){
-	int i;
-	for(i=0; i < nbyte; i++){
-		if( i % 16 == 0 ){
-			printf("0x%02X:", i);
-		}
-		printf("0x%02X ", buffer[i]);
-		if( i % 16 == 15 ){
-			printf("\n");
-		}
-	}
-	printf("\n");
-}
-
-void read_bus(int port, int addr, int start, int nbyte){
-	I2C i2c(port);
+void read_bus(const options_t & options){
+	I2C i2c(options.port);
 	int ret;
+	int i;
+	char buffer[options.nbytes];
+	memset(buffer, 0, options.nbytes);
 
-	if( i2c.init(100000) < 0 ){
-		perror("Failed to init I2C bus");
-		exit(1);
-	}
+	i2c_open(i2c, options);
+	i2c.setup(options.slave_addr);
 
-	i2c.setup(addr);
-
-	char buffer[nbyte];
-	memset(buffer, 0, nbyte);
-
-	ret = i2c.read(start, buffer, nbyte);
+	ret = i2c.read(options.offset, buffer, options.nbytes);
 	if( ret > 0 ){
-		show_buffer(buffer, ret);
+		for(i=0; i < ret; i++){
+			printf("Reg[%03d or 0x%02X] = %03d or 0x%02X\n",
+					i + options.offset, i + options.offset,
+					buffer[i], buffer[i]);
+		}
 	} else {
-		printf("Failed to read 0x%X (%d)\n", addr, i2c.err());
+		printf("Failed to read 0x%X (%d)\n", options.slave_addr, i2c.err());
 	}
 
 	i2c.close();
 }
 
-void show_version(const char * name){
-	printf("%s version: %s by %s\n", name, VERSION, PUBLISHER);
+void write_bus(const options_t & options){
+	I2C i2c(options.port);
+	int ret;
+
+	i2c_open(i2c, options);
+	i2c.setup(options.slave_addr);
+
+	ret = i2c.write(options.offset, &options.value, 1);
+	if( ret < 0 ){
+		printf("Failed to write 0x%X (%d)\n", options.slave_addr, i2c.err());
+	}
+
+	i2c.close();
+}
+
+void parse_options(const Cli & cli, options_t & options){
+	if( cli.is_option("--version") ){
+		cli.print_version();
+		exit(0);
+	}
+
+	options.port = 0;
+	options.bitrate = 100000;
+	options.pinassign = 0;
+	options.pu = false;
+	options.action = ACTION_PROBE;
+	options.slave_addr = 0;
+	options.offset = 0;
+	options.value = 0;
+	options.pointer_16 = false;
+
+	if( cli.is_option("-p") ){
+		options.port = cli.get_option_value("-p");
+	} else if( cli.is_option("--port") ){
+		options.port = cli.get_option_value("--port");
+	}
+
+	if( cli.is_option("-b") ){
+		options.bitrate = cli.get_option_value("-b");
+	} else if( cli.is_option("--bitrate") ){
+		options.bitrate = cli.get_option_value("--bitrate");
+	}
+
+	if( cli.is_option("-pa") ){
+		options.pinassign = cli.get_option_value("-pa");
+	} else if( cli.is_option("--pinassign") ){
+		options.pinassign = cli.get_option_value("--pinassign");
+	}
+
+	if( cli.is_option("-o") ){
+		options.offset = cli.get_option_value("-o");
+	} else if( cli.is_option("--offset") ){
+		options.offset = cli.get_option_value("--offset");
+	}
+
+	if( cli.is_option("-a") ){
+		options.slave_addr = cli.get_option_value("-a");
+	} else if( cli.is_option("--addr") ){
+		options.slave_addr = cli.get_option_value("--addr");
+	}
+
+	if( cli.is_option("-n") ){
+		options.nbytes = cli.get_option_value("-n");
+	} else if( cli.is_option("--nbytes") ){
+		options.nbytes = cli.get_option_value("--nbytes");
+	}
+
+	if( cli.is_option("-v") ){
+		options.value = cli.get_option_value("-v");
+	} else if( cli.is_option("--value") ){
+		options.value = cli.get_option_value("--value");
+	}
+
+	if( options.nbytes > 1024 ){
+		options.nbytes = 1024;
+	}
+
+	if( cli.is_option("-pu") || cli.is_option("--pullup") ){
+		options.pu = true;
+	}
+
+	if( cli.is_option("-p16") || cli.is_option("--pointer16") ){
+		options.pointer_16 = true;
+	}
+
+	if( cli.is_option("-r") || cli.is_option("--read") ){
+		options.action = ACTION_READ;
+	}
+
+	if( cli.is_option("-w") || cli.is_option("--write") ){
+		options.action = ACTION_WRITE;
+	}
 }
 
 void show_usage(const char * name){

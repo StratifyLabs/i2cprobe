@@ -9,10 +9,11 @@
     "github": "https://github.com/StratifyLabs/i2cprobe",
     "hardwareid": "",
     "name": "i2cprobe",
+    "permissions": "public",
     "publisher": "Stratify Labs, Inc",
     "ram": 8192,
     "tags": "utility",
     "type": "StratifyApp",
     "uid": "QSW7bQHeDqhJEcZ0mxQ5SmEYUSL2",
-    "version": "0.9"
+    "version": "1.0"
 }
