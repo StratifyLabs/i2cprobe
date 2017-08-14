@@ -1,5 +1,5 @@
 {
-    "LocalBuild": "build_release_armv7em_fpu",
+    "LocalBuild": "build_release_armv7m",
     "LocalInstallPath": "/app/.install",
     "LocalIsRam": false,
     "LocalIsStartup": false,
@@ -11,7 +11,7 @@
     "name": "i2cprobe",
     "permissions": "public",
     "publisher": "Stratify Labs, Inc",
-    "ram": 8192,
+    "ram": 0,
     "tags": "utility",
     "type": "StratifyApp",
     "uid": "QSW7bQHeDqhJEcZ0mxQ5SmEYUSL2",
