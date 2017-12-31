@@ -10,7 +10,9 @@ SContainer {
   style: "block fill";
 
   property real addresses: 4;
-  property var scanData: [];
+  property var scanData: ({});
+  property string scanDataJson;
+
   function saveOptions(){
     logic.setState("i2cprobe.i2cPort", i2cPort.text);
     logic.setState("i2cprobe.sclPin", sclPin.text);
@@ -21,9 +23,9 @@ SContainer {
   }
 
   function scanI2C(){
-
     saveOptions();
-    scanData = [];
+    scanData = {};
+    scanData.data = [];
 
     var args = "-i2c " + i2cPort.text +
         (sclPin.text !== "" ? (" -scl " + sclPin.text) : "") +
@@ -39,14 +41,11 @@ SContainer {
     target: logic;
 
     onDeviceMessageChanged: {
-      console.log("Got message");
       if( message.type === "address" ){
-        console.log("Message address " + message.address + " " + message.value);
-        i2cprobe.scanData.push(message.value);
-        //console.log("Scan data " + scanData.data[message.address]);
+        i2cprobe.scanData.data.push(message);
         if( message.address === "0x7F" ){
-          console.log("JSON");
-          console.log("JSON:" + i2cprobe.scanData);
+          console.log("JSON " + logic.stringify(scanData));
+          scanDataJson = logic.stringify(scanData);
         }
       }
     }
@@ -241,19 +240,15 @@ SContainer {
 
       SRepeater {
         id: repeater;
-        SJsonModel {
-          id: dataModel;
-          json: JSON.stringify(scanData);
-          onJsonChanged: {
-            console.log("Json is " + json);
-          }
-        }
 
-        model: repeater;
+
+        model: SJsonModel {
+          json: scanDataJson;
+        }
         SLabel {
           span: 1;
-          text: "0x" + (index.toString(16)).toUpperCase();
-          style: scanData[text] === true  ? "label-primary block text-center" : "label-naked block text-center";
+          text: model.address;
+          style: model.value === true  ? "label-primary block text-center" : "label-naked block text-center";
         }
       }
     }
