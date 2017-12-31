@@ -1,30 +1,56 @@
 import QtQuick 2.0
-import StratifyLabs.UI 2.1
+import StratifyLabs.UI 2.2
 import QtCharts 2.2
 import QtQuick.Dialogs 1.2
 
 
 SContainer {
+  id: i2cprobe;
   name: "Test";
   style: "block fill";
 
-  function scanI2C(){
-
-
+  property real addresses: 4;
+  property var scanData: [];
+  function saveOptions(){
     logic.setState("i2cprobe.i2cPort", i2cPort.text);
     logic.setState("i2cprobe.sclPin", sclPin.text);
     logic.setState("i2cprobe.sdaPin", sdaPin.text);
     logic.setState("i2cprobe.slaveAddress", slaveAddress.text);
     logic.setState("i2cprobe.offset", offset.text);
     logic.setState("i2cprobe.value", value.text);
+  }
 
+  function scanI2C(){
+
+    saveOptions();
+    scanData = [];
+
+    var args = "-i2c " + i2cPort.text +
+        (sclPin.text !== "" ? (" -scl " + sclPin.text) : "") +
+        (sdaPin.text !== "" ? (" -sda " + sdaPin.text) : "") +
+        (slaveAddress.text !== "" ? (" -sda " + sdaPin.text) : "") +
+        " -freq 100000 -pu" +
+        " -scan -message 1.0";
+
+    logic.appRun("i2cprobe " + args);
   }
 
   Connections {
     target: logic;
 
+    onDeviceMessageChanged: {
+      console.log("Got message");
+      if( message.type === "address" ){
+        console.log("Message address " + message.address + " " + message.value);
+        i2cprobe.scanData.push(message.value);
+        //console.log("Scan data " + scanData.data[message.address]);
+        if( message.address === "0x7F" ){
+          console.log("JSON");
+          console.log("JSON:" + i2cprobe.scanData);
+        }
+      }
+    }
   }
-
 
   Component.onCompleted: {
     i2cPort.text = logic.getState("i2cprobe.i2cPort");
@@ -61,12 +87,13 @@ SContainer {
           icon: Fa.Icon.search;
           style: "btn-primary text-semi-bold";
           onClicked: {
-            logic.runApp("uartprobe -p 0");
+            scanI2C();
           }
 
           SToolTip {
             text: "Scan I2C";
           }
+
         }
 
         SButton {
@@ -88,6 +115,14 @@ SContainer {
           }
           SToolTip {
             text: "Read Device";
+          }
+        }
+
+        SButton {
+          style: "btn-primary";
+          label: "Install";
+          onClicked: {
+            logic.appInstall("/Users/tgil/git/StratifyApps/i2cprobe");
           }
         }
       }
@@ -199,39 +234,48 @@ SContainer {
         text: "I2C Bus Scan";
         attr.paddingHorizontal: 0;
       }
+    }
 
-      SButton {
-        span: 2;
-        style: "btn-outline-secondary right text-semi-bold";
-        text: "Clear";
-        icon: Fa.Icon.times;
-        onClicked: {
-          terminalTextBox.textBox.clear();
+    SRow {
+      style: "block fill";
+
+      SRepeater {
+        id: repeater;
+        SJsonModel {
+          id: dataModel;
+          json: JSON.stringify(scanData);
+          onJsonChanged: {
+            console.log("Json is " + json);
+          }
+        }
+
+        model: repeater;
+        SLabel {
+          span: 1;
+          text: "0x" + (index.toString(16)).toUpperCase();
+          style: scanData[text] === true  ? "label-primary block text-center" : "label-naked block text-center";
         }
       }
     }
 
-    SPane {
+
+    STextBox {
+      id: terminalText;
       style: "block fill";
-      implicitHeight: 600;
-      SRow {
-        style: "block fill";
-        Repeater {
-          model: 128;
-          SLabel {
-            span: 1;
-            text: "0x" + (index.toString(16)).toUpperCase();
-            style: "label-naked block";
-          }
+      implicitHeight: 200;
+      Connections {
+        target: logic;
+        onStdioChanged: {
+          terminalText.textBox.insert(terminalText.textBox.length, value);
+          terminalText.textBox.cursorPosition = terminalText.textBox.text.length;
         }
       }
-
     }
 
     SProgressBar {
       visible: logic.progressMax !== 0;
       value: logic.progressMax ? logic.progress / logic.progressMax : 0;
-      style: "block success sm";
+      style: "block success sm bottom";
     }
 
   }

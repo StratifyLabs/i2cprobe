@@ -7,7 +7,7 @@
 #include <sapi/fmt.hpp>
 
 
-#define PUBLISHER "Stratify Labs, Inc (C) 2017"
+#define PUBLISHER "Stratify Labs, Inc (C) 2018"
 
 static void show_usage(const Cli & cli);
 
@@ -23,7 +23,8 @@ typedef struct {
 	bool is_map;
 } options_t;
 
-static void probe_bus(const options_t & options);
+static void scan_bus(const options_t & options);
+static void scan_bus_message(const options_t & options);
 static void read_bus(const options_t & options);
 static void write_bus(const options_t & options);
 
@@ -34,7 +35,7 @@ static bool parse_options(const Cli & cli, options_t & options);
 static void message_printf(const char * format, ...);
 
 enum {
-	ACTION_PROBE,
+	ACTION_SCAN,
 	ACTION_READ,
 	ACTION_WRITE,
 	ACTION_TOTAL
@@ -42,18 +43,17 @@ enum {
 
 
 int main(int argc, char * argv[]){
-
 	Cli cli(argc, argv);
 	cli.set_publisher(PUBLISHER);
 	I2CAttr i2c_attr;
 	Messenger messenger(512);
+	int ret;
 
 	options_t options;
 
-	if( cli.is_option("-w") == false ){
+	if( cli.is_option("-w") == false ){ //-w needs the -v option for the value
 		cli.handle_version();
 	}
-
 
 	if( cli.is_option("--help") || cli.is_option("-h") ){
 		show_usage(cli);
@@ -62,8 +62,13 @@ int main(int argc, char * argv[]){
 	if( cli.is_option("-message") ){
 		mcu_pin_t channels;
 		channels = cli.get_option_pin("-message");
-		messenger.start("/dev/fifo", channels.port, channels.pin);
+		if( (ret = messenger.start("/dev/fifo", channels.port, channels.pin)) < 0 ){
+			printf("Failed to start messenger %d\n", ret);
+			exit(1);
+		}
+		printf("Opened %d\n", messenger.fileno());
 		m_current_messenger = &messenger;
+		messenger.set_timeout(250);
 	} else {
 		m_current_messenger = 0;
 	}
@@ -71,28 +76,34 @@ int main(int argc, char * argv[]){
 	memset(&options, 0, sizeof(options));
 	if( parse_options(cli, options) ){
 
+		if( m_current_messenger == 0 ){
+			printf("I2C Port:%d Bitrate:%ldbps PU:%d",
+					options.port,
+					options.attr.freq,
+					(options.attr.o_flags & I2C::FLAG_IS_PULLUP) != 0);
 
-		printf("I2C Port:%d Bitrate:%ldbps PU:%d",
-				options.port,
-				options.attr.freq,
-				(options.attr.o_flags & I2C::FLAG_IS_PULLUP) != 0);
+			if( options.attr.pin_assignment.sda.port != 0xff ){
+				printf(" sda:%d.%d scl:%d.%d\n",
+						options.attr.pin_assignment.sda.port,
+						options.attr.pin_assignment.sda.pin,
+						options.attr.pin_assignment.scl.port,
+						options.attr.pin_assignment.scl.pin
+				);
+			} else {
+				printf(" default pin assignment\n");
+			}
 
-		if( options.attr.pin_assignment.sda.port != 0xff ){
-			printf(" sda:%d.%d scl:%d.%d\n",
-					options.attr.pin_assignment.sda.port,
-					options.attr.pin_assignment.sda.pin,
-					options.attr.pin_assignment.scl.port,
-					options.attr.pin_assignment.scl.pin
-			);
-		} else {
-			printf(" default pin assignment\n");
 		}
 
 
 		switch(options.action){
-		case ACTION_PROBE:
-			printf("Probe:\n");
-			probe_bus(options);
+		case ACTION_SCAN:
+			if( m_current_messenger ){
+				scan_bus_message(options);
+			} else {
+				printf("Probe:\n");
+				scan_bus(options);
+			}
 			break;
 		case ACTION_READ:
 			printf("Read: %d bytes from 0x%X at %d\n", options.nbytes, options.slave_addr, options.offset);
@@ -101,6 +112,9 @@ int main(int argc, char * argv[]){
 		case ACTION_WRITE:
 			printf("Write: %d to %d on 0x%X\n", options.value, options.offset, options.slave_addr);
 			write_bus(options);
+			break;
+		default:
+			show_usage(cli);
 			break;
 		}
 
@@ -125,7 +139,7 @@ void i2c_open(I2C & i2c, const options_t & options){
 }
 
 
-void probe_bus(const options_t & options){
+void scan_bus(const options_t & options){
 	I2C i2c(options.port);
 	int i;
 	char c;
@@ -148,6 +162,59 @@ void probe_bus(const options_t & options){
 		}
 		if( i % 16 == 15 ){
 			printf("\n");
+		}
+	}
+
+	printf("\n");
+
+	i2c.close();
+}
+
+void scan_bus_message(const options_t & options){
+	I2C i2c(options.port);
+	int i;
+	char c;
+	bool is_active;
+	Son message;
+	char message_buffer[256];
+	Data message_data(message_buffer, 256);
+	String address;
+
+	i2c_open(i2c, options);
+
+	for(i=0; i <= 127; i++){
+
+		address.sprintf("0x%X", i);
+
+		if( i != 0 ){
+			i2c.prepare(i, I2C::FLAG_PREPARE_DATA);
+			if( i2c.read(&c, 1) == 1 ){
+				is_active = true;
+			} else {
+				is_active = false;
+			}
+		} else {
+			is_active = false;
+		}
+
+		if( i % 3 == 0 ){
+			is_active = true;
+		}
+
+		message.get_error();
+		message.create_message(message_data);
+		message.open_object("");
+		message.write("type", "address");
+		message.write("address", address);
+		message.write("value", is_active);
+		message.close_object();
+		message.close();
+
+		message.open_message(message_data);
+		errno = 0;
+		if( m_current_messenger->send_message(message) < 0 ){
+			printf("failed to send message %d %d\n", message.get_error(), errno);
+			exit(1);
 		}
 	}
 
@@ -202,7 +269,7 @@ void write_bus(const options_t & options){
 
 bool parse_options(const Cli & cli, options_t & options){
 	I2CAttr i2c_attr;
-	options.action = ACTION_PROBE;
+	options.action = ACTION_TOTAL;
 	options.slave_addr = 0;
 	options.offset = 0;
 	options.value = 0;
@@ -249,6 +316,10 @@ bool parse_options(const Cli & cli, options_t & options){
 			}
 		}
 
+		if( cli.is_option("-scan") ){
+			options.action = ACTION_SCAN;
+		}
+
 		if( cli.is_option("-map") ){
 			options.is_map = true;
 		}
@@ -271,7 +342,7 @@ void show_usage(const Cli & cli){
 	printf("\nActions:\n");
 	printf("\t-r -- Read from bus\n");
 	printf("\t-w -- Write a byte to the bus\n");
-	printf("\t-probe -- Probe the bus (default action if none specified)\n");
+	printf("\t-scan -- Scan the bus\n");
 
 	printf("\nAction Options:\n");
 	printf("\t-o <value> -- Offset to read/write\n");
