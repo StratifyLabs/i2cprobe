@@ -6,7 +6,6 @@
 #include <sapi/sys.hpp>
 #include <sapi/fmt.hpp>
 
-
 #define PUBLISHER "Stratify Labs, Inc (C) 2018"
 
 static void show_usage(const Cli & cli);
@@ -32,7 +31,6 @@ Messenger * m_current_messenger;
 
 static void i2c_open(I2C & i2c, const options_t & options);
 static bool parse_options(const Cli & cli, options_t & options);
-static void message_printf(const char * format, ...);
 
 enum {
 	ACTION_SCAN,
@@ -41,12 +39,11 @@ enum {
 	ACTION_TOTAL
 };
 
-
 int main(int argc, char * argv[]){
 	Cli cli(argc, argv);
 	cli.set_publisher(PUBLISHER);
 	I2CAttr i2c_attr;
-	Messenger messenger(512);
+	Messenger messenger(1024);
 	int ret;
 
 	options_t options;
@@ -66,7 +63,6 @@ int main(int argc, char * argv[]){
 			printf("Failed to start messenger %d\n", ret);
 			exit(1);
 		}
-		printf("Opened %d\n", messenger.fileno());
 		m_current_messenger = &messenger;
 		messenger.set_timeout(250);
 	} else {
@@ -94,7 +90,6 @@ int main(int argc, char * argv[]){
 			}
 
 		}
-
 
 		switch(options.action){
 		case ACTION_SCAN:
@@ -197,10 +192,6 @@ void scan_bus_message(const options_t & options){
 			is_active = false;
 		}
 
-		if( i % 3 == 0 ){
-			is_active = true;
-		}
-
 		message.get_error();
 		message.create_message(message_data);
 		message.open_object("");
@@ -233,6 +224,7 @@ void read_bus(const options_t & options){
 	i2c_open(i2c, options);
 	i2c.prepare(options.slave_addr);
 
+	printf("Read 0x%X %d %d\n", options.slave_addr, options.offset, options.nbytes);
 	ret = i2c.read(options.offset, buffer, options.nbytes);
 	if( ret > 0 ){
 		for(i=0; i < ret; i++){
@@ -353,22 +345,3 @@ void show_usage(const Cli & cli){
 	exit(0);
 }
 
-void message_printf(const char * format, ...){
-	char buffer[256];
-	buffer[255] = 0;
-	va_list args;
-	va_start (args, format);
-	vsnprintf(buffer, 255, format, args);
-	if( m_current_messenger ){
-		char message_image[512];
-		Son message(4);
-		message.create_message(message_image, 512);
-		message.open_object("");
-		message.write("message", buffer);
-		message.close();
-		message.open_read_message(buffer, 512);
-		m_current_messenger->send_message(message);
-	} else {
-		printf(buffer);
-	}
-}

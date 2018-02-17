@@ -2,39 +2,70 @@ import QtQuick 2.0
 import StratifyLabs.UI 2.2
 import QtCharts 2.2
 import QtQuick.Dialogs 1.2
+import QtQuick.Controls 2.1
+
 
 
 SContainer {
   id: i2cprobe;
-  name: "Test";
   style: "block fill";
 
   property real addresses: 4;
   property var scanData: ({});
   property string scanDataJson;
+  property real count;
 
   function saveOptions(){
     logic.setState("i2cprobe.i2cPort", i2cPort.text);
     logic.setState("i2cprobe.sclPin", sclPin.text);
     logic.setState("i2cprobe.sdaPin", sdaPin.text);
-    logic.setState("i2cprobe.slaveAddress", slaveAddress.text);
-    logic.setState("i2cprobe.offset", offset.text);
-    logic.setState("i2cprobe.value", value.text);
+    logic.setState("i2cprobe.writeAddress", writeAddress.text);
+    logic.setState("i2cprobe.writeOffset", writeOffset.text);
+    logic.setState("i2cprobe.writeValue", writeValue.text);
+    logic.setState("i2cprobe.readAddress", readAddress.text);
+    logic.setState("i2cprobe.readOffset", readOffset.text);
+    logic.setState("i2cprobe.readBytes", readBytes.text);
+  }
+
+  function readI2C(){
+    saveOptions();
+    scanData = {};
+    scanDataJson = "";
+    count = 0;
+
+    var args = "-i2c " + i2cPort.text +
+        (sclPin.text !== "" ? (" -scl " + sclPin.text) : "") +
+        (sdaPin.text !== "" ? (" -sda " + sdaPin.text) : "") +
+        (bitrate.text !== "" ? (" -freq " + bitrate.text) : "") +
+        (pullup.checked === true ? (" -pu") : "") +
+        (readBytes.text !== "" ? (" -n " + readBytes.text) : "-n 1") +
+        (readAddress.text !== "" ? (" -slave " + readAddress.text) : "-slave 0") +
+        (readOffset.text !== "" ? (" -o " + readOffset.text) : "-o 0") +
+
+        " -r  -message 255.0";
+
+    logic.appRun("i2cprobe " + args);
+    terminalTextBox.visible = true;
+    scrollingPane.updateContentRect();
   }
 
   function scanI2C(){
     saveOptions();
     scanData = {};
     scanData.data = [];
+    count = 0;
+    terminalTextBox.visible = false;
 
     var args = "-i2c " + i2cPort.text +
         (sclPin.text !== "" ? (" -scl " + sclPin.text) : "") +
         (sdaPin.text !== "" ? (" -sda " + sdaPin.text) : "") +
-        (slaveAddress.text !== "" ? (" -sda " + sdaPin.text) : "") +
-        " -freq 100000 -pu" +
-        " -scan -message 1.0";
+        (bitrate.text !== "" ? (" -freq " + bitrate.text) : "") +
+        (pullup.checked === true ? (" -pu") : "") +
+        " -scan -message 255.0";
 
     logic.appRun("i2cprobe " + args);
+
+
   }
 
   Connections {
@@ -43,9 +74,16 @@ SContainer {
     onDeviceMessageChanged: {
       if( message.type === "address" ){
         i2cprobe.scanData.data.push(message);
+        logic.progress = count++;
+        logic.progressMax = 127;
+        logic.progressChanged();
         if( message.address === "0x7F" ){
           console.log("JSON " + logic.stringify(scanData));
           scanDataJson = logic.stringify(scanData);
+          logic.progress = 0;
+          logic.progressMax = 0;
+          logic.progressChanged();
+          scrollingPane.updateContentRect();
         }
       }
     }
@@ -55,105 +93,70 @@ SContainer {
     i2cPort.text = logic.getState("i2cprobe.i2cPort");
     sclPin.text = logic.getState("i2cprobe.sclPin");
     sdaPin.text = logic.getState("i2cprobe.sdaPin");
-    slaveAddress.text = logic.getState("i2cprobe.slaveAddress");
-    offset.text = logic.getState("i2cprobe.offset");
-    value.text = logic.getState("i2cprobe.value");
+    writeAddress.text = logic.getState("i2cprobe.writeAddress");
+    writeOffset.text = logic.getState("i2cprobe.writeOffset");
+    writeValue.text = logic.getState("i2cprobe.writeValue");
+    readAddress.text = logic.getState("i2cprobe.readAddress");
+    readOffset.text = logic.getState("i2cprobe.readOffset");
+    readBytes.text = logic.getState("i2cprobe.readBytes");
   }
 
-  SColumn {
-    style: "block";
-    SRow {
-      SLabel {
-        attr.paddingHorizontal: 0;
-        style: "text-h1 left";
-        text: "I2C Probe"
-      }
-    }
+  SPane {
+    id: scrollingPane;
+    clip: false;
 
-    SRow {
-      SLabel {
-        style: "btn-primary left";
-        text: "Actions";
-        attr.paddingHorizontal: 0;
-        span: 2;
+    SColumn {
+      style: "block";
+
+      SRow {
+        SLabel {
+          attr.paddingHorizontal: 0;
+          style: "text-h1 left";
+          text: "I2C Probe"
+        }
       }
 
-      SGroup {
-        span: 2;
-        style: "right";
+      SProgressBar {
+        visible: logic.progressMax !== 0;
+        value: logic.progressMax ? logic.progress / logic.progressMax : 0;
+        style: "block success sm bottom";
+      }
 
-        SButton {
-          icon: Fa.Icon.search;
-          style: "btn-primary text-semi-bold";
-          onClicked: {
-            scanI2C();
-          }
-
-          SToolTip {
-            text: "Scan I2C";
-          }
-
+      SRow {
+        SLabel {
+          style: "btn-primary left";
+          text: "I2C Settings";
+          attr.paddingHorizontal: 0;
+          span: 2;
         }
 
-        SButton {
-          icon: Fa.Icon.download;
-          style: "btn-primary text-semi-bold";
-          onClicked: {
+        SGroup {
+          span: 2;
+          style: "right";
 
-          }
-          SToolTip {
-            text: "Write Device";
-          }
-        }
+          SButton {
+            icon: Fa.Icon.search;
+            style: "btn-primary text-semi-bold";
+            text: "Scan";
+            onClicked: {
+              scanI2C();
+            }
 
-        SButton {
-          icon: Fa.Icon.upload;
-          style: "btn-primary text-semi-bold";
-          onClicked: {
-
+            SToolTip {
+              text: "Scan I2C";
+            }
           }
-          SToolTip {
-            text: "Read Device";
-          }
-        }
 
-        SButton {
-          style: "btn-primary";
-          label: "Install";
-          onClicked: {
-            logic.appInstall("/Users/tgil/git/StratifyApps/i2cprobe");
+          SButton {
+            style: "btn-primary";
+            label: "Install";
+            onClicked: {
+              logic.appInstall("/Users/tgil/git/StratifyApps/i2cprobe");
+            }
           }
         }
       }
-    }
 
-    SHLine{}
-
-    SRow {
-      SLabel {
-        style: "btn-primary left";
-        text: "Options";
-        attr.paddingHorizontal: 0;
-        span: 2;
-      }
-
-      SGroup {
-        span: 2;
-        style: "right";
-
-        SButton {
-          id: showButton;
-          icon: options.visible ? Fa.Icon.minus: Fa.Icon.plus;
-          style: "btn-outline-secondary text-semi-bold";
-          onClicked: {
-            options.visible = !options.visible;
-          }
-        }
-      }
-    }
-
-    SContainer {
-      id: options;
       SRow {
         SLabel {
           span: 2;
@@ -191,87 +194,183 @@ SContainer {
         SLabel {
           span: 2;
           style: "left";
-          text: "Address";
+          text: "Bitrate";
         }
         SInput {
-          id: slaveAddress;
+          id: bitrate;
           span:2;
           style: "right text-center";
-          placeholder: "0xXX";
+          placeholder: "100000";
         }
-        SLabel {
+
+        SCheckbox {
+          id: pullup;
+          span:4;
+          text: "Internal Pullup";
+          style: "right text-center";
+        }
+      }
+
+      SHLine{}
+
+      SRow {
+        SButton {
           span: 2;
+          icon: Fa.Icon.download;
+          text: "Write";
+          style: "btn-primary text-semi-bold left";
+          onClicked: {
+          }
+          SToolTip {
+            text: "Write Device";
+          }
+        }
+      }
+
+      SContainer {
+        id: writeOptions;
+        SRow {
+          SLabel {
+            span: 2;
+            style: "left";
+            text: "Address";
+          }
+          SInput {
+            id: writeAddress;
+            span:2;
+            style: "right text-center";
+            placeholder: "0xXX";
+          }
+          SLabel {
+            span: 2;
+            style: "left";
+            text: "Offset";
+          }
+          SInput {
+            id: writeOffset;
+            span:2;
+            style: "right text-center";
+            placeholder: "0xXX";
+          }
+          SLabel {
+            span: 2;
+            style: "left";
+            text: "Value";
+          }
+          SInput {
+            id: writeValue;
+            span:2;
+            style: "right text-center";
+            placeholder: "0xXX";
+          }
+        }
+      }
+
+      SHLine{}
+
+      SRow {
+        SGroup {
           style: "left";
-          text: "Offset";
+          SButton {
+            span: 2;
+            icon: Fa.Icon.upload;
+            text: "Read";
+            style: "btn-primary text-semi-bold left";
+            onClicked: {
+              readI2C();
+            }
+            SToolTip {
+              text: "Read Device";
+            }
+          }
+          SButton {
+            span: 2;
+            icon: Fa.Icon.times;
+            text: "Clear";
+            style: "btn-outline-secondary text-semi-bold left";
+            onClicked: {
+              terminalTextBox.textBox.clear();
+            }
+            SToolTip {
+              text: "Clear Output";
+            }
+          }
         }
-        SInput {
-          id: offset;
-          span:2;
-          style: "right text-center";
-          placeholder: "0xXX";
+      }
+
+      SContainer {
+        id: readOptions;
+        SRow {
+          SLabel {
+            span: 2;
+            style: "left";
+            text: "Address";
+          }
+          SInput {
+            id: readAddress;
+            span:2;
+            style: "right text-center";
+            placeholder: "0xXX";
+          }
+          SLabel {
+            span: 2;
+            style: "left";
+            text: "Offset";
+          }
+          SInput {
+            id: readOffset;
+            span:2;
+            style: "right text-center";
+            placeholder: "0xXX";
+          }
+          SLabel {
+            span: 2;
+            style: "left";
+            text: "Bytes";
+          }
+          SInput {
+            id: readBytes;
+            span:2;
+            style: "right text-center";
+            placeholder: "0xXX";
+          }
         }
-        SLabel {
-          span: 2;
-          style: "left";
-          text: "Value";
+      }
+
+      SHLine{}
+
+      SRow {
+        style: "block fill";
+
+        SRepeater {
+          id: repeater;
+          model: SJsonModel {
+            json: scanDataJson;
+          }
+          SLabel {
+            span: 1;
+            text: model.address;
+            style: model.value === true  ? "label-primary block text-center" : "label-naked block text-center";
+          }
         }
-        SInput {
-          id: value;
-          span:2;
-          style: "right text-center";
-          placeholder: "0xXX";
+      }
+
+      STextBox {
+        id: terminalTextBox;
+        style: "fill";
+        attr.textFont: STheme.font_family_monospace.name;
+        textBox.readOnly: true;
+        implicitHeight: 250;
+        visible: false;
+
+        Connections {
+          target: logic;
+          onStdioChanged: {
+            terminalTextBox.textBox.insert(terminalTextBox.textBox.length, value);
+            terminalTextBox.textBox.cursorPosition = terminalTextBox.textBox.text.length;
+          }
         }
       }
     }
-
-    SHLine{}
-
-    SRow {
-      SLabel {
-        span: 2;
-        style: "left";
-        text: "I2C Bus Scan";
-        attr.paddingHorizontal: 0;
-      }
-    }
-
-    SRow {
-      style: "block fill";
-
-      SRepeater {
-        id: repeater;
-
-
-        model: SJsonModel {
-          json: scanDataJson;
-        }
-        SLabel {
-          span: 1;
-          text: model.address;
-          style: model.value === true  ? "label-primary block text-center" : "label-naked block text-center";
-        }
-      }
-    }
-
-
-    STextBox {
-      id: terminalText;
-      style: "block fill";
-      implicitHeight: 200;
-      Connections {
-        target: logic;
-        onStdioChanged: {
-          terminalText.textBox.insert(terminalText.textBox.length, value);
-          terminalText.textBox.cursorPosition = terminalText.textBox.text.length;
-        }
-      }
-    }
-
-    SProgressBar {
-      visible: logic.progressMax !== 0;
-      value: logic.progressMax ? logic.progress / logic.progressMax : 0;
-      style: "block success sm bottom";
-    }
-
   }
 }
