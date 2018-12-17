@@ -126,7 +126,7 @@ void i2c_open(I2C & i2c, const options_t & options){
 		exit(1);
 	}
 
-	if( i2c.set_attr(options.attr) < 0 ){
+	if( i2c.set_attributes(options.attr) < 0 ){
 		i2c.close();
 		perror("Failed to set I2C attributes");
 		exit(1);
@@ -238,7 +238,7 @@ void read_bus(const options_t & options){
 			}
 		}
 	} else {
-		printf("Failed to read 0x%X (%d)\n", options.slave_addr, i2c.get_err());
+        printf("Failed to read 0x%X (%d)\n", options.slave_addr, i2c.get_error());
 	}
 
 	i2c.close();
@@ -253,7 +253,7 @@ void write_bus(const options_t & options){
 
 	ret = i2c.write(options.offset, &options.value, 1);
 	if( ret < 0 ){
-		printf("Failed to write 0x%X (%d)\n", options.slave_addr, i2c.get_err());
+        printf("Failed to write 0x%X (%d)\n", options.slave_addr, i2c.get_error());
 	}
 
 	i2c.close();
@@ -271,7 +271,7 @@ bool parse_options(const Cli & cli, options_t & options){
 
 	if( cli.handle_i2c(i2c_attr) == true ){
 
-		options.attr = i2c_attr;
+		options.attr = i2c_attr.attributes();
 		options.port = i2c_attr.port();
 		options.slave_addr = i2c_attr.slave_addr();
 

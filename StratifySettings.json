@@ -9,7 +9,7 @@
         }
     },
     "buildprefix": "build_",
-    "change": "Updated to latest cloud format",
+    "change": "Added support for Cortex M7",
     "changes": {
         "-L2JSs454wjE-ia6vRdG": {
             "description": "Updated for Stratify APP UI",
@@ -22,6 +22,14 @@
         "-L2TpgHkP51jzdici45V": {
             "description": "Updated to latest cloud format",
             "version": "1.5"
+        },
+        "-L7AWI9QVZDETzca_xc1": {
+            "description": "Updated for new architectures",
+            "version": "1.6"
+        },
+        "-L9fT0qFmxLL---cY4kv": {
+            "description": "Added support for Cortex M7",
+            "version": "1.7"
         }
     },
     "description": "i2cprobe is an application that is used to check for devices on the i2c bus.",
@@ -34,5 +42,5 @@
     "tags": "utility",
     "type": "StratifyApp",
     "uid": "QSW7bQHeDqhJEcZ0mxQ5SmEYUSL2",
-    "version": "1.5"
+    "version": "1.7"
 }

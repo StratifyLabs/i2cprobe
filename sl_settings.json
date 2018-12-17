@@ -1,0 +1,14 @@
+{
+   "description": "i2cprobe is an application that is used to check for devices on the i2c bus.",
+   "github": "https://github.com/StratifyLabs/i2cprobe",
+   "name": "i2cprobe",
+   "permissions": "public",
+   "publisher": "Stratify Labs, Inc",
+   "tags": "utility",
+   "type": "app",
+   "uid": "QSW7bQHeDqhJEcZ0mxQ5SmEYUSL2",
+   "version": "1.7",
+   "hardwaredId": "",
+   "documentId": "97C0hyMnTQObLFHT3Mgn",
+   "ramSize": 0
+}
